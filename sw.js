@@ -1,5 +1,5 @@
 /* Service Worker для автономной работы приложения */
-const CACHE = 'mks-timer-v2';
+const CACHE = 'mks-timer-v3';
 const ASSETS = [
     './',
     './index.html',
