@@ -302,7 +302,7 @@
         }
         @keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
         #timer-app .progress-labels { display: flex; justify-content: space-between; margin-top: 5px; font-size: 12px; }
-        #timer-app .progress-percentage { text-align: center; font-size: 14px; font-weight: bold; margin-top: 5px; }
+        #timer-app .progress-percentage { text-align: center; font-size: 14px; font-weight: bold; margin-top: 5px; transition: color 0.5s ease; }
         #timer-app .progress-milestone { position: absolute; top: -2px; width: 12px; height: 12px; background: white; border: 2px solid #333; border-radius: 50%; transform: translateX(-50%); z-index: 3; }
         #timer-app .milestone-reached { background: #4CAF50; border-color: #2E7D32; }
 
@@ -312,13 +312,13 @@
             border: 1px solid rgba(0,0,0,0.06); letter-spacing: 0.5px;
             display: flex; justify-content: space-between; align-items: center;
             gap: 6px; flex-wrap: wrap;
-            transition: background 0.6s ease, border-color 0.6s ease, color 0.6s ease;
+            transition: background 0.6s ease, border-color 0.6s ease, box-shadow 0.6s ease;
         }
         .shift-timer-half { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: 1 1 40%; min-width: 0; }
         .shift-total-timer .label { font-weight: 400; font-size: 12px; opacity: 0.7; white-space: nowrap; }
         .shift-total-timer .time {
             font-feature-settings: "tnum"; font-variant-numeric: tabular-nums;
-            font-weight: 700; font-size: 18px; transition: color 0.6s ease; white-space: nowrap;
+            font-weight: 700; font-size: 18px; white-space: nowrap;
         }
 
         #timer-app .timer-display {
@@ -1435,24 +1435,33 @@
         AppStorage.set('lastShift', shiftInfo.shift);
     }
 
+    /* ---------- Функция цвета прогресса (без изменений) ---------- */
+    function getShiftColor(p) {
+        let r, g, b;
+        if (p <= 0.5) { const t = p / 0.5; r = 255; g = Math.round(255 * t); b = 0; }
+        else { const t = (p - 0.5) / 0.5; r = Math.round(255 * (1 - t)); g = 255; b = 0; }
+        return `rgb(${r}, ${g}, ${b})`;
+    }
+
+    /* =========================================================================
+       ВАРИАНТ 3: цвет прогресса переносим на рамку и нижнюю полосу блока.
+       Цифры всегда контрастные (наследуют цвет темы).
+       ========================================================================= */
     function updateShiftTotalTimer(now, shiftStart, shiftEnd, shiftInfo) {
         const elTime = document.getElementById('shiftTotalTime');
         const elElapsed = document.getElementById('shiftElapsedTime');
         const timerBlock = document.getElementById('shiftTotalTimer');
         if (!elTime || !elElapsed || !timerBlock) return;
 
-        function getShiftColor(p) {
-            let r, g, b;
-            if (p <= 0.5) { const t = p / 0.5; r = 255; g = Math.round(255 * t); b = 0; }
-            else { const t = (p - 0.5) / 0.5; r = Math.round(255 * (1 - t)); g = 255; b = 0; }
-            return `rgb(${r}, ${g}, ${b})`;
-        }
         function fmt(ms) {
             if (ms < 0) ms = 0;
             const s = Math.floor(ms / 1000);
             return `${formatTime(Math.floor(s / 3600))}:${formatTime(Math.floor((s % 3600) / 60))}:${formatTime(s % 60)}`;
         }
 
+        const isNight = document.body.classList.contains('night-shift');
+
+        // Если смена не активна — показываем время до следующей
         if (!shiftStart || !shiftEnd || !shiftInfo.isActive) {
             const totalMinutes = now.getHours() * 60 + now.getMinutes();
             const today = new Date(now); today.setHours(0, 0, 0, 0);
@@ -1465,9 +1474,11 @@
             }
             elTime.textContent = calculateTimeRemaining(now, nextStart);
             elElapsed.textContent = '00:00:00';
+            elTime.style.color = '';
+            elElapsed.style.color = '';
             timerBlock.style.background = 'rgba(128,128,128,0.15)';
-            elTime.style.color = '#aaa';
-            elElapsed.style.color = '#aaa';
+            timerBlock.style.borderColor = 'rgba(128,128,128,0.3)';
+            timerBlock.style.boxShadow = 'none';
             return;
         }
 
@@ -1478,11 +1489,17 @@
         elTime.textContent = calculateTimeRemaining(now, shiftEnd);
         elElapsed.textContent = fmt(elapsed);
 
+        // ВАРИАНТ 3: текст всегда читаемый, цвет выносим на рамку и полосу
+        elTime.style.color = '';
+        elElapsed.style.color = '';
+
         const color = getShiftColor(progress);
-        elTime.style.color = color;
-        elElapsed.style.color = color;
-        timerBlock.style.background = 'rgba(0,0,0,0.03)';
+        timerBlock.style.background = isNight
+            ? 'rgba(255, 255, 255, 0.04)'
+            : 'rgba(0, 0, 0, 0.03)';
         timerBlock.style.borderColor = color;
+        timerBlock.style.boxShadow = `inset 0 -4px 0 ${color}`;
+        timerBlock.style.transition = 'box-shadow 0.6s ease, border-color 0.6s ease, background 0.6s ease';
     }
 
     function updateEventProgress(event, now) {
@@ -1521,6 +1538,9 @@
         labelCurrent.textContent = `${emoji} ${Math.round(percentage)}% (осталось ${left})`;
     }
 
+    /* =========================================================================
+       Прогресс-бар основной смены + подсветка процента в ночной теме
+       ========================================================================= */
     function updateProgressBar(now, shiftStart, shiftEnd, shiftInfo) {
         const progressBar = document.getElementById('progressBar');
         const progressPercentage = document.getElementById('progressPercentage');
@@ -1535,6 +1555,7 @@
         if (!shiftStart || !shiftEnd) {
             progressBar.style.width = '0%';
             progressPercentage.textContent = "0% выполнено (Между сменами)";
+            progressPercentage.style.color = '';
             if (milestone1) milestone1.classList.remove('milestone-reached');
             if (milestone2) milestone2.classList.remove('milestone-reached');
             if (milestone3) milestone3.classList.remove('milestone-reached');
@@ -1565,6 +1586,14 @@
         const halfTime = new Date(shiftStart.getTime() + total / 2);
         if (halfShiftLabel) halfShiftLabel.textContent = halfTime.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
         progressPercentage.textContent = `${percentage.toFixed(1)}% выполнено`;
+
+        // Бонус: подсветка процента прогресса в ночной теме
+        const isNight = document.body.classList.contains('night-shift');
+        if (isNight) {
+            progressPercentage.style.color = getShiftColor(percentage / 100);
+        } else {
+            progressPercentage.style.color = '';
+        }
     }
 
     function showTimeToNextShift(now) {
@@ -1591,7 +1620,10 @@
         if (mainTimer) mainTimer.textContent = calculateTimeRemaining(now, nextShiftStart);
         if (timerEvent) timerEvent.textContent = "До начала следующей смены";
         if (timerDisplay) timerDisplay.className = "timer-display next-shift-time";
-        if (progressPercentage) progressPercentage.textContent = "0% выполнено (Между сменами)";
+        if (progressPercentage) {
+            progressPercentage.textContent = "0% выполнено (Между сменами)";
+            progressPercentage.style.color = '';
+        }
     }
 
     function updateTimer() {
